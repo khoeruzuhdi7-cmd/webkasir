@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kasirku POS - Sistem Kasir Modern</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Print Stylesheet for Receipt */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-receipt, #printable-receipt * {
+                visibility: visible;
+            }
+            #printable-receipt {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 15px;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800 font-sans antialiased selection:bg-emerald-500 selection:text-white" x-data="posSystem()">
+
+    <!-- Toast Notification -->
+    <div class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div x-show="toast.show" 
+                 x-transition:enter="transition ease-out duration-300 transform"
+                 x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                 x-transition:leave="transition ease-in duration-200 transform"
+                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+                 :class="{
+                    'bg-slate-900 text-white': toast.type === 'info',
+                    'bg-emerald-600 text-white': toast.type === 'success',
+                    'bg-rose-600 text-white': toast.type === 'danger',
+                    'bg-amber-500 text-white': toast.type === 'warning'
+                 }"
+                 class="px-4 py-3 rounded-xl shadow-xl flex items-center justify-between gap-3 text-sm font-medium pointer-events-auto border border-white/10">
+                <div class="flex items-center gap-2">
+                    <i :class="toast.icon"></i>
+                    <span x-text="toast.message"></span>
+                </div>
+                <button @click="removeToast(toast.id)" class="opacity-70 hover:opacity-100">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </template>
+    </div>
+
+    <!-- Main App Container -->
+    <div class="flex h-screen overflow-hidden bg-slate-100">
+
+        <!-- Sidebar Navigation -->
+        <aside class="w-20 lg:w-64 bg-slate-900 text-slate-300 flex flex-col justify-between flex-shrink-0 transition-all duration-300 z-20">
+            <div>
+                <!-- Brand Logo -->
+                <div class="h-16 flex items-center px-4 lg:px-6 bg-slate-950 border-b border-slate-800">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-500/20">
+                        <i class="fa-solid fa-cash-register"></i>
+                    </div>
+                    <div class="ml-3 hidden lg:block">
+                        <h1 class="font-bold text-white text-lg tracking-wide leading-none">Kasir<span class="text-emerald-400">ku</span></h1>
+                        <p class="text-xs text-slate-400 mt-1">POS Modern v2.5</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Links -->
+                <nav class="p-3 space-y-1.5">
+                    <button @click="currentTab = 'pos'" 
+                            :class="currentTab === 'pos' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'"
+                            class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all group">
+                        <i class="fa-solid fa-store text-lg group-hover:scale-110 transition-transform"></i>
+                        <span class="hidden lg:block">Mesin Kasir</span>
+                    </button>
+
+                    <button @click="currentTab = 'products'" 
+                            :class="currentTab === 'products' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'"
+                            class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all group">
+                        <i class="fa-solid fa-boxes-stacked text-lg group-hover:scale-110 transition-transform"></i>
+                        <span class="hidden lg:block">Kelola Produk</span>
+                    </button>
+
+                    <button @click="currentTab = 'history'" 
+                            :class="currentTab === 'history' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'"
+                            class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all group">
+                        <i class="fa-solid fa-receipt text-lg group-hover:scale-110 transition-transform"></i>
+                        <span class="hidden lg:block">Riwayat Transaksi</span>
+                    </button>
+
+                    <button @click="currentTab = 'reports'" 
+                            :class="currentTab === 'reports' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'"
+                            class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all group">
+                        <i class="fa-solid fa-chart-line text-lg group-hover:scale-110 transition-transform"></i>
+                        <span class="hidden lg:block">Laporan Penjualan</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- User Info / Cashier Profile -->
+            <div class="p-3 border-t border-slate-800 bg-slate-950/50">
+                <div class="flex items-center gap-3 p-2 rounded-xl">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" alt="Kasir Profile" class="w-10 h-10 rounded-full object-cover border-2 border-emerald-500">
+                    <div class="hidden lg:block overflow-hidden">
+                        <p class="text-sm font-semibold text-white truncate">Siti Rahma</p>
+                        <p class="text-xs text-emerald-400 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span> Kasir Shift 1
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-100">
+
+            <!-- Top Header Bar -->
+            <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-bold text-slate-800" x-text="getTabTitle()"></h2>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50" x-text="formattedDate"></span>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <!-- Quick Barcode Search Input -->
+                    <div class="relative hidden sm:block w-64" x-show="currentTab === 'pos'">
+                        <i class="fa-solid fa-barcode absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" 
+                               x-model="barcodeQuery"
+                               @keydown.enter="searchByBarcode()"
+                               placeholder="Scan Barcode / SKU..." 
+                               class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                    </div>
+
+                    <!-- Cart Toggle Button for Mobile Screen -->
+                    <button @click="mobileCartOpen = !mobileCartOpen" 
+                            x-show="currentTab === 'pos'"
+                            class="xl:hidden relative p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors">
+                        <i class="fa-solid fa-shopping-bag text-lg"></i>
+                        <span x-show="cart.length > 0" 
+                              x-text="cartTotalQuantity"
+                              class="absolute -top-1 -right-1 bg-rose-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"></span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- TAB 1: POS / MESIN KASIR -->
+            <div x-show="currentTab === 'pos'" class="flex-1 flex overflow-hidden">
+                
+                <!-- Product List Section -->
+                <div class="flex-1 flex flex-col min-w-0 overflow-hidden p-4 lg:p-6 space-y-4">
+                    
+                    <!-- Filter and Search Header -->
+                    <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
+                        <!-- Search Box -->
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="text" 
+                                   x-model="searchQuery" 
+                                   placeholder="Cari produk berdasarkan nama atau SKU..." 
+                                   class="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                            <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                <i class="fa-solid fa-circle-xmark"></i>
+                            </button>
+                        </div>
+
+                        <!-- Category Filters -->
+                        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+                            <button @click="selectedCategory = 'all'" 
+                                    :class="selectedCategory === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all">
+                                Semua
+                            </button>
+                            <template x-for="cat in categories" :key="cat">
+                                <button @click="selectedCategory = cat" 
+                                        :class="selectedCategory === cat ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                        class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all capitalize"
+                                        x-text="cat">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Product Grid Area -->
+                    <div class="flex-1 overflow-y-auto pr-1">
+                        <div x-show="filteredProducts.length === 0" class="h-64 flex flex-col items-center justify-center text-slate-400">
+                            <i class="fa-solid fa-box-open text-5xl mb-3 text-slate-300"></i>
+                            <p class="font-medium text-slate-500">Produk tidak ditemukan</p>
+                            <p class="text-xs text-slate-400 mt-1">Coba gunakan kata kunci atau filter kategori lain.</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            <template x-for="product in filteredProducts" :key="product.id">
+                                <div @click="addToCart(product)" 
+                                     class="group bg-white rounded-2xl border border-slate-200/80 p-3 flex flex-col justify-between cursor-pointer hover:shadow-xl hover:border-emerald-500/50 transition-all duration-200 relative overflow-hidden">
+                                    
+                                    <!-- Stock Badge -->
+                                    <div class="absolute top-2.5 right-2.5 z-10">
+                                        <span :class="{
+                                                'bg-rose-100 text-rose-700 border-rose-200': product.stock <= 5,
+                                                'bg-emerald-100 text-emerald-700 border-emerald-200': product.stock > 5
+                                              }" 
+                                              class="text-[10px] font-bold px-2 py-0.5 rounded-full border">
+                                            Stok: <span x-text="product.stock"></span>
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <!-- Product Image -->
+                                        <div class="w-full h-32 rounded-xl bg-slate-100 overflow-hidden mb-3 relative group-hover:scale-105 transition-transform duration-300">
+                                            <img :src="product.image" 
+                                                 :alt="product.name" 
+                                                 class="w-full h-full object-cover"
+                                                 onerror="this.src='https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop&q=80'">
+                                            <div class="absolute inset-0 bg-emerald-900/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <span class="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                                                    <i class="fa-solid fa-plus"></i>
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Category -->
+                                        <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider" x-text="product.category"></p>
+                                        
+                                        <!-- Title -->
+                                        <h3 class="font-semibold text-slate-800 text-sm line-clamp-2 mt-0.5 group-hover:text-emerald-600 transition-colors" x-text="product.name"></h3>
+                                    </div>
+
+                                    <!-- Price Footer -->
+                                    <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                        <span class="font-bold text-slate-900 text-sm" x-text="formatRupiah(product.price)"></span>
+                                        <span class="text-[10px] text-slate-400 font-mono" x-text="product.sku"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cart / Order Summary Panel (Desktop Right Side / Mobile Overlay) -->
+                <div :class="{'translate-x-0': mobileCartOpen, 'translate-x-full xl:translate-x-0': !mobileCartOpen}"
+                     class="fixed xl:relative right-0 top-0 bottom-0 w-full sm:w-96 xl:w-96 bg-white border-l border-slate-200 flex flex-col z-30 transition-transform duration-300 shadow-2xl xl:shadow-none">
+                    
+                    <!-- Cart Header -->
+                    <div class="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-receipt text-emerald-600"></i>
+                            <h3 class="font-bold text-slate-800 text-base">Pesanan Aktif</h3>
+                            <span class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full" x-text="cartTotalQuantity"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @click="clearCart()" 
+                                    x-show="cart.length > 0"
+                                    class="text-xs font-semibold text-rose-600 hover:text-rose-700 px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors">
+                                Kosongkan
+                            </button>
+                            <button @click="mobileCartOpen = false" class="xl:hidden text-slate-400 hover:text-slate-600 p-1">
+                                <i class="fa-solid fa-xmark text-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Cart Item List -->
+                    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                        <template x-if="cart.length === 0">
+                            <div class="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                                <div class="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 text-3xl mb-3">
+                                    <i class="fa-solid fa-cart-shopping"></i>
+                                </div>
+                                <p class="font-semibold text-slate-600 text-sm">Keranjang Belanja Kosong</p>
+                                <p class="text-xs text-slate-400 text-center max-w-[200px] mt-1">Klik item produk di sebelah kiri untuk menambah pesanan.</p>
+                            </div>
+                        </template>
+
+                        <template x-for="item in cart" :key="item.id">
+                            <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200/60 flex items-center gap-3 relative group">
+                                <img :src="item.image" :alt="item.name" class="w-12 h-12 rounded-xl object-cover flex-shrink-0 bg-white">
+                                
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-semibold text-slate-800 text-xs truncate" x-text="item.name"></h4>
+                                    <p class="text-xs font-bold text-emerald-600 mt-0.5" x-text="formatRupiah(item.price)"></p>
+                                </div>
+
+                                <!-- Quantity Controls -->
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded-xl border border-slate-200">
+                                    <button @click="decreaseQty(item)" class="text-slate-500 hover:text-rose-600 w-5 h-5 flex items-center justify-center">
+                                        <i class="fa-solid fa-minus text-[10px]"></i>
+                                    </button>
+                                    <span class="text-xs font-bold text-slate-800 w-4 text-center" x-text="item.qty"></span>
+                                    <button @click="increaseQty(item)" class="text-slate-500 hover:text-emerald-600 w-5 h-5 flex items-center justify-center">
+                                        <i class="fa-solid fa-plus text-[10px]"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Remove button -->
+                                <button @click="removeFromCart(item)" class="text-slate-300 hover:text-rose-500 p-1 transition-colors">
+                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Cart Footer / Calculation Area -->
+                    <div class="p-4 bg-slate-900 text-white space-y-3 rounded-t-3xl shadow-2xl">
+                        <!-- Subtotal, Tax & Discount Summary -->
+                        <div class="space-y-1.5 text-xs border-b border-slate-800 pb-3">
+                            <div class="flex justify-between text-slate-400">
+                                <span>Subtotal</span>
+                                <span class="font-semibold text-slate-200" x-text="formatRupiah(subtotal)"></span>
+                            </div>
+                            <div class="flex justify-between text-slate-400">
+                                <span class="flex items-center gap-1">
+                                    Diskon (%)
+                                </span>
+                                <div class="flex items-center gap-1">
+                                    <input type="number" min="0" max="100" x-model.number="discountPercent" class="w-12 bg-slate-800 text-right text-emerald-400 rounded px-1 py-0.5 border border-slate-700 text-xs focus:outline-none">
+                                    <span class="text-emerald-400 font-semibold" x-text="'-' + formatRupiah(discountAmount)"></span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between text-slate-400">
+                                <span>PPN (11%)</span>
+                                <span class="font-semibold text-slate-200" x-text="formatRupiah(taxAmount)"></span>
+                            </div>
+                        </div>
+
+                        <!-- Grand Total -->
+                        <div class="flex items-baseline justify-between pt-1">
+                            <div>
+                                <p class="text-xs text-slate-400 font-medium">Total Pembayaran</p>
+                                <p class="text-xl font-extrabold text-emerald-400 mt-0.5" x-text="formatRupiah(grandTotal)"></p>
+                            </div>
+                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">
+                                <span x-text="cart.length"></span> Item
+                            </span>
+                        </div>
+
+                        <!-- Checkout Button -->
+                        <button @click="openPaymentModal()" 
+                                :disabled="cart.length === 0"
+                                :class="cart.length === 0 ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-lg shadow-emerald-500/25 active:scale-[0.98]'"
+                                class="w-full py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all text-sm mt-2">
+                            <i class="fa-solid fa-credit-card"></i>
+                            <span>Bayar Sekarang</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: MANAJEMEN PRODUK -->
+            <div x-show="currentTab === 'products'" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <!-- Action Bar -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800">Daftar Inventaris Produk</h3>
+                        <p class="text-xs text-slate-500">Kelola stok, harga, dan informasi katalog toko Anda.</p>
+                    </div>
+                    <button @click="openProductModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all shadow-md shadow-emerald-600/20">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Tambah Produk Baru</span>
+                    </button>
+                </div>
+
+                <!-- Products Table -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                <tr>
+                                    <th class="p-4">Produk</th>
+                                    <th class="p-4">SKU / Kode</th>
+                                    <th class="p-4">Kategori</th>
+                                    <th class="p-4">Harga Beli</th>
+                                    <th class="p-4">Harga Jual</th>
+                                    <th class="p-4">Stok</th>
+                                    <th class="p-4 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-for="product in products" :key="product.id">
+                                    <tr class="hover:bg-slate-50/80 transition-colors">
+                                        <td class="p-4 flex items-center gap-3">
+                                            <img :src="product.image" :alt="product.name" class="w-10 h-10 rounded-xl object-cover bg-slate-100">
+                                            <span class="font-semibold text-slate-800 text-sm" x-text="product.name"></span>
+                                        </td>
+                                        <td class="p-4 font-mono text-xs text-slate-500" x-text="product.sku"></td>
+                                        <td class="p-4">
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 capitalize" x-text="product.category"></span>
+                                        </td>
+                                        <td class="p-4 font-medium text-slate-600" x-text="formatRupiah(product.costPrice || product.price * 0.7)"></td>
+                                        <td class="p-4 font-bold text-emerald-600" x-text="formatRupiah(product.price)"></td>
+                                        <td class="p-4">
+                                            <span :class="product.stock <= 5 ? 'text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded' : 'text-slate-700 font-semibold'" x-text="product.stock"></span>
+                                        </td>
+                                        <td class="p-4 text-center">
+                                            <div class="flex items-center justify-center gap-2">
+                                                <button @click="editProduct(product)" class="p-2 text-slate-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50 transition-colors">
+                                                    <i class="fa-solid fa-pen-to-square"></i>
+                                                </button>
+                                                <button @click="deleteProduct(product.id)" class="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: RIWAYAT TRANSAKSI -->
+            <div x-show="currentTab === 'history'" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800">Riwayat Penjualan</h3>
+                        <p class="text-xs text-slate-500">Daftar transaksi yang telah selesai diproses.</p>
+                    </div>
+                    <span class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl" x-text="transactions.length + ' Transaksi Recorded'"></span>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <table class="w-full text-left text-sm text-slate-600">
+                        <thead class="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                            <tr>
+                                <th class="p-4">ID Transaksi</th>
+                                <th class="p-4">Waktu</th>
+                                <th class="p-4">Metode</th>
+                                <th class="p-4">Total Items</th>
+                                <th class="p-4">Total Bayar</th>
+                                <th class="p-4 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="trx in transactions" :key="trx.id">
+                                <tr class="hover:bg-slate-50/80 transition-colors">
+                                    <td class="p-4 font-mono font-semibold text-emerald-600 text-xs" x-text="trx.id"></td>
+                                    <td class="p-4 text-xs text-slate-500" x-text="trx.date"></td>
+                                    <td class="p-4">
+                                        <span class="px-2.5 py-1 rounded-full text-xs font-semibold uppercase bg-slate-100 text-slate-700" x-text="trx.paymentMethod"></span>
+                                    </td>
+                                    <td class="p-4 text-slate-700 font-medium" x-text="trx.items.reduce((a,b) => a + b.qty, 0) + ' Item'"></td>
+                                    <td class="p-4 font-bold text-slate-900" x-text="formatRupiah(trx.total)"></td>
+                                    <td class="p-4 text-center">
+                                        <button @click="viewReceipt(trx)" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-600 text-slate-600 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 mx-auto">
+                                            <i class="fa-solid fa-receipt"></i>
+                                            <span>Lihat Struk</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 4: LAPORAN PENJUALAN -->
+            <div x-show="currentTab === 'reports'" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <!-- Summary Metrics Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400">Pendapatan Hari Ini</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="formatRupiah(totalRevenue)"></p>
+                            <p class="text-[10px] text-emerald-600 font-semibold mt-1"><i class="fa-solid fa-arrow-trend-up"></i> +12% dari kemarin</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-wallet"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400">Total Transaksi</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="transactions.length"></p>
+                            <p class="text-[10px] text-emerald-600 font-semibold mt-1">Status: Berhasil</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-basket-shopping"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400">Item Terjual</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="totalItemsSold"></p>
+                            <p class="text-[10px] text-slate-400 mt-1">Total kuantitas barang</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-cubes"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400">Rata-rata Transaksi</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="formatRupiah(transactions.length ? totalRevenue / transactions.length : 0)"></p>
+                            <p class="text-[10px] text-slate-400 mt-1">Per keranjang</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-calculator"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Best Sellers section -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-base mb-4">Produk Terlaris</h3>
+                        <div class="space-y-4">
+                            <template x-for="(top, idx) in topProducts" :key="idx">
+                                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center" x-text="idx + 1"></span>
+                                        <span class="font-semibold text-slate-800 text-sm" x-text="top.name"></span>
+                                    </div>
+                                    <span class="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full" x-text="top.sold + ' Terjual'"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-base mb-4">Metode Pembayaran Populer</h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm font-medium text-slate-600">Tunai (Cash)</span>
+                                <div class="w-1/2 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-emerald-500 h-full w-[60%]"></div>
+                                </div>
+                                <span class="text-xs font-bold text-slate-700">60%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm font-medium text-slate-600">QRIS</span>
+                                <div class="w-1/2 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-blue-500 h-full w-[30%]"></div>
+                                </div>
+                                <span class="text-xs font-bold text-slate-700">30%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm font-medium text-slate-600">Kartu Debit/Kredit</span>
+                                <div class="w-1/2 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-amber-500 h-full w-[10%]"></div>
+                                </div>
+                                <span class="text-xs font-bold text-slate-700">10%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL 1: PEMBAYARAN KASIR -->
+    <div x-show="showPaymentModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div x-show="showPaymentModal" 
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100">
+            
+            <div class="p-5 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-lg">Konfirmasi Pembayaran</h3>
+                    <p class="text-xs text-slate-400">Pilih metode bayar dan selesaikan transaksi</p>
+                </div>
+                <button @click="showPaymentModal = false" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <!-- Select Payment Method -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Metode Pembayaran</label>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button @click="paymentMethod = 'cash'" 
+                                :class="paymentMethod === 'cash' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+                                class="p-3 border rounded-2xl flex flex-col items-center gap-1 transition-all text-xs">
+                            <i class="fa-solid fa-money-bill-wave text-lg"></i>
+                            <span>Tunai</span>
+                        </button>
+                        <button @click="paymentMethod = 'qris'" 
+                                :class="paymentMethod === 'qris' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+                                class="p-3 border rounded-2xl flex flex-col items-center gap-1 transition-all text-xs">
+                            <i class="fa-solid fa-qrcode text-lg"></i>
+                            <span>QRIS</span>
+                        </button>
+                        <button @click="paymentMethod = 'debit'" 
+                                :class="paymentMethod === 'debit' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+                                class="p-3 border rounded-2xl flex flex-col items-center gap-1 transition-all text-xs">
+                            <i class="fa-solid fa-credit-card text-lg"></i>
+                            <span>Debit/EDC</span>
+                        </button>
+                        <button @click="paymentMethod = 'e-wallet'" 
+                                :class="paymentMethod === 'e-wallet' ? 'border-emerald-600 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+                                class="p-3 border rounded-2xl flex flex-col items-center gap-1 transition-all text-xs">
+                            <i class="fa-solid fa-mobile-screen-button text-lg"></i>
+                            <span>e-Wallet</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Total Payment Highlight -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center">
+                    <span class="text-xs font-semibold text-slate-400">Total Tagihan</span>
+                    <p class="text-3xl font-extrabold text-slate-900 mt-1" x-text="formatRupiah(grandTotal)"></p>
+                </div>
+
+                <!-- Cash Section -->
+                <div x-show="paymentMethod === 'cash'" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Uang Diterima (Rp)</label>
+                        <input type="number" 
+                               x-model.number="cashPaid" 
+                               placeholder="0"
+                               class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <!-- Fast Cash Suggestions -->
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="cashPaid = grandTotal" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-700 rounded-xl text-xs font-semibold transition-colors">Uang Pas</button>
+                        <button @click="cashPaid = 20000" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-700 rounded-xl text-xs font-semibold transition-colors">Rp 20.000</button>
+                        <button @click="cashPaid = 50000" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-700 rounded-xl text-xs font-semibold transition-colors">Rp 50.000</button>
+                        <button @click="cashPaid = 100000" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-700 rounded-xl text-xs font-semibold transition-colors">Rp 100.000</button>
+                    </div>
+
+                    <!-- Change Calculation -->
+                    <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200/60 flex items-center justify-between">
+                        <span class="text-xs font-bold text-emerald-800">Kembalian:</span>
+                        <span class="text-base font-extrabold text-emerald-700" x-text="formatRupiah(changeAmount)"></span>
+                    </div>
+                </div>
+
+                <!-- Non-cash QRIS placeholder -->
+                <div x-show="paymentMethod === 'qris'" class="text-center py-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=KASIRKU-PAYMENT-DEMO" alt="QRIS Demo" class="mx-auto rounded-xl border p-2 bg-white shadow-sm">
+                    <p class="text-xs font-semibold text-slate-500 mt-2">Scan QRIS untuk menyelesaikan pembayaran</p>
+                </div>
+
+                <button @click="processPayment()" 
+                        :disabled="paymentMethod === 'cash' && cashPaid < grandTotal"
+                        :class="paymentMethod === 'cash' && cashPaid < grandTotal ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/30'"
+                        class="w-full py-4 rounded-2xl font-bold transition-all text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Selesaikan Transaksi</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: DETAIL STRUK / PRINTER -->
+    <div x-show="showReceiptModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div x-show="showReceiptModal" 
+             class="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+            
+            <div class="p-4 bg-slate-900 text-white flex items-center justify-between no-print">
+                <h3 class="font-bold text-sm">Struk Pembayaran</h3>
+                <button @click="showReceiptModal = false" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Printable Receipt Container -->
+            <div id="printable-receipt" class="p-6 bg-white overflow-y-auto text-xs font-mono text-slate-700 space-y-4 leading-relaxed">
+                <div class="text-center space-y-1">
+                    <h2 class="text-base font-bold text-slate-900">KASIRKU POS STORE</h2>
+                    <p class="text-[10px] text-slate-500">Jl. Pemuda No. 123, Semarang, Jateng</p>
+                    <p class="text-[10px] text-slate-500">Telp: 0812-3456-7890</p>
+                </div>
+
+                <div class="border-b border-dashed border-slate-300 py-2 space-y-0.5">
+                    <div class="flex justify-between">
+                        <span>No. Trx:</span>
+                        <span class="font-bold" x-text="currentReceipt.id"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Tanggal:</span>
+                        <span x-text="currentReceipt.date"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Kasir:</span>
+                        <span>Siti Rahma</span>
+                    </div>
+                </div>
+
+                <!-- Items list -->
+                <div class="space-y-2 border-b border-dashed border-slate-300 pb-3">
+                    <template x-for="item in currentReceipt.items" :key="item.id">
+                        <div>
+                            <div class="font-bold text-slate-800" x-text="item.name"></div>
+                            <div class="flex justify-between text-slate-500">
+                                <span x-text="item.qty + ' x ' + formatRupiah(item.price)"></span>
+                                <span class="font-semibold text-slate-800" x-text="formatRupiah(item.qty * item.price)"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Calculations -->
+                <div class="space-y-1 border-b border-dashed border-slate-300 pb-3">
+                    <div class="flex justify-between">
+                        <span>Subtotal</span>
+                        <span x-text="formatRupiah(currentReceipt.subtotal)"></span>
+                    </div>
+                    <div class="flex justify-between" x-show="currentReceipt.discount > 0">
+                        <span>Diskon</span>
+                        <span x-text="'-' + formatRupiah(currentReceipt.discount)"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>PPN (11%)</span>
+                        <span x-text="formatRupiah(currentReceipt.tax)"></span>
+                    </div>
+                    <div class="flex justify-between font-bold text-sm text-slate-900 pt-1">
+                        <span>TOTAL</span>
+                        <span x-text="formatRupiah(currentReceipt.total)"></span>
+                    </div>
+                </div>
+
+                <!-- Payment Info -->
+                <div class="space-y-0.5 text-slate-500">
+                    <div class="flex justify-between">
+                        <span>Bayar (<span class="uppercase" x-text="currentReceipt.paymentMethod"></span>)</span>
+                        <span x-text="formatRupiah(currentReceipt.cashPaid || currentReceipt.total)"></span>
+                    </div>
+                    <div class="flex justify-between" x-show="currentReceipt.paymentMethod === 'cash'">
+                        <span>Kembali</span>
+                        <span x-text="formatRupiah(currentReceipt.change)"></span>
+                    </div>
+                </div>
+
+                <div class="text-center pt-4 border-t border-slate-100 space-y-1">
+                    <p class="font-bold text-slate-800">-- Terima Kasih --</p>
+                    <p class="text-[9px] text-slate-400">Barang yang sudah dibeli tidak dapat ditukar/dikembalikan.</p>
+                </div>
+            </div>
+
+            <!-- Print Actions -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex gap-2 no-print">
+                <button @click="printReceipt()" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-print"></i>
+                    <span>Cetak Struk</span>
+                </button>
+                <button @click="showReceiptModal = false" class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-semibold text-xs transition-colors">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: TAMBAH / EDIT PRODUK (CRUD) -->
+    <div x-show="showProductModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div x-show="showProductModal" class="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100">
+            <div class="p-5 bg-slate-900 text-white flex items-center justify-between">
+                <h3 class="font-bold text-base" x-text="isEditingProduct ? 'Edit Produk' : 'Tambah Produk Baru'"></h3>
+                <button @click="showProductModal = false" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveProduct()" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Nama Produk</label>
+                    <input type="text" x-model="productForm.name" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Kategori</label>
+                        <select x-model="productForm.category" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none capitalize">
+                            <template x-for="cat in categories" :key="cat">
+                                <option :value="cat" x-text="cat"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">SKU / Kode Barcode</label>
+                        <input type="text" x-model="productForm.sku" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Harga Jual (Rp)</label>
+                        <input type="number" x-model.number="productForm.price" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Jumlah Stok</label>
+                        <input type="number" x-model.number="productForm.stock" required class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">URL Gambar Produk</label>
+                    <input type="url" x-model="productForm.image" placeholder="https://..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <div class="pt-3 flex gap-2">
+                    <button type="submit" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-colors">
+                        Simpan Produk
+                    </button>
+                    <button type="button" @click="showProductModal = false" class="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-sm transition-colors">
+                        Batal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alpine.js Application Logic Script -->
+    <script>
+        function posSystem() {
+            return {
+                currentTab: 'pos',
+                mobileCartOpen: false,
+                searchQuery: '',
+                barcodeQuery: '',
+                selectedCategory: 'all',
+                
+                // Modals
+                showPaymentModal: false,
+                showReceiptModal: false,
+                showProductModal: false,
+                isEditingProduct: false,
+
+                // Payment State
+                paymentMethod: 'cash',
+                cashPaid: 0,
+                discountPercent: 0,
+
+                // Toasts
+                toasts: [],
+
+                // Initial Categories
+                categories: ['makanan utama', 'minuman', 'snack', 'dessert'],
+
+                // Initial Sample Products (Katalog Menu Lengkap & Banyak)
+                products: [
+                    // --- MAKANAN UTAMA ---
+                    { id: 1, name: 'Nasi Goreng Spesial', category: 'makanan utama', price: 28000, costPrice: 15000, stock: 35, sku: 'MKN-001', image: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=300&auto=format&fit=crop&q=80' },
+                    { id: 2, name: 'Ayam Goreng Serundeng', category: 'makanan utama', price: 32000, costPrice: 18000, stock: 20, sku: 'MKN-002', image: 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=300&auto=format&fit=crop&q=80' },
+                    { id: 3, name: 'Mie Goreng Jawa', category: 'makanan utama', price: 25000, costPrice: 12000, stock: 30, sku: 'MKN-003', image: 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=300&auto=format&fit=crop&q=80' },
+                    { id: 4, name: 'Soto Ayam Lamongan', category: 'makanan utama', price: 27000, costPrice: 14000, stock: 25, sku: 'MKN-004', image: 'https://images.unsplash.com/photo-1572656631137-7935297eff55?w=300&auto=format&fit=crop&q=80' },
+                    { id: 5, name: 'Beef Teriyaki Bento', category: 'makanan utama', price: 45000, costPrice: 28000, stock: 15, sku: 'MKN-005', image: 'https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=300&auto=format&fit=crop&q=80' },
+                    { id: 6, name: 'Chicken Katsu Curry', category: 'makanan utama', price: 38000, costPrice: 22000, stock: 18, sku: 'MKN-006', image: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=300&auto=format&fit=crop&q=80' },
+                    { id: 7, name: 'Kwetiau Goreng Sapi', category: 'makanan utama', price: 35000, costPrice: 20000, stock: 22, sku: 'MKN-007', image: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=300&auto=format&fit=crop&q=80' },
+                    { id: 8, name: 'Bebek Goreng Madura', category: 'makanan utama', price: 42000, costPrice: 25000, stock: 12, sku: 'MKN-008', image: 'https://images.unsplash.com/photo-1514944288352-fffac99f0bdf?w=300&auto=format&fit=crop&q=80' },
+                    { id: 9, name: 'Nasi Rendang Padang', category: 'makanan utama', price: 36000, costPrice: 22000, stock: 16, sku: 'MKN-009', image: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=300&auto=format&fit=crop&q=80' },
+                    { id: 10, name: 'Sate Ayam Madura (10 Pcs)', category: 'makanan utama', price: 30000, costPrice: 17000, stock: 25, sku: 'MKN-010', image: 'https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=300&auto=format&fit=crop&q=80' },
+                    { id: 11, name: 'Spageti Bolognese', category: 'makanan utama', price: 34000, costPrice: 19000, stock: 20, sku: 'MKN-011', image: 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=300&auto=format&fit=crop&q=80' },
+                    { id: 12, name: 'Carbonara Pasta', category: 'makanan utama', price: 38000, costPrice: 21000, stock: 15, sku: 'MKN-012', image: 'https://images.unsplash.com/photo-1612874742237-6526221588e3?w=300&auto=format&fit=crop&q=80' },
+
+                    // --- MINUMAN ---
+                    { id: 13, name: 'Es Teh Manis', category: 'minuman', price: 6000, costPrice: 2000, stock: 100, sku: 'MNM-001', image: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=300&auto=format&fit=crop&q=80' },
+                    { id: 14, name: 'Es Jeruk Peras', category: 'minuman', price: 10000, costPrice: 4000, stock: 60, sku: 'MNM-002', image: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=300&auto=format&fit=crop&q=80' },
+                    { id: 15, name: 'Kopi Susu Gula Aren', category: 'minuman', price: 18000, costPrice: 8000, stock: 50, sku: 'MNM-003', image: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=300&auto=format&fit=crop&q=80' },
+                    { id: 16, name: 'Matcha Latte Ice', category: 'minuman', price: 22000, costPrice: 10000, stock: 40, sku: 'MNM-004', image: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=300&auto=format&fit=crop&q=80' },
+                    { id: 17, name: 'Thai Tea Original', category: 'minuman', price: 15000, costPrice: 6000, stock: 45, sku: 'MNM-005', image: 'https://images.unsplash.com/photo-1558857563-b371033873b8?w=300&auto=format&fit=crop&q=80' },
+                    { id: 18, name: 'Taro Milk Tea', category: 'minuman', price: 18000, costPrice: 8000, stock: 35, sku: 'MNM-006', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=300&auto=format&fit=crop&q=80' },
+                    { id: 19, name: 'Cappuccino Hot/Ice', category: 'minuman', price: 24000, costPrice: 11000, stock: 30, sku: 'MNM-007', image: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=300&auto=format&fit=crop&q=80' },
+                    { id: 20, name: 'Americano Ice', category: 'minuman', price: 20000, costPrice: 7000, stock: 40, sku: 'MNM-008', image: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=300&auto=format&fit=crop&q=80' },
+                    { id: 21, name: 'Jus Alpukat Shake', category: 'minuman', price: 20000, costPrice: 9000, stock: 25, sku: 'MNM-009', image: 'https://images.unsplash.com/photo-1589733955941-5eeaf752f6dd?w=300&auto=format&fit=crop&q=80' },
+                    { id: 22, name: 'Ice Lemon Tea', category: 'minuman', price: 12000, costPrice: 5000, stock: 50, sku: 'MNM-010', image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=300&auto=format&fit=crop&q=80' },
+                    { id: 23, name: 'Milkshake Cokelat', category: 'minuman', price: 22000, costPrice: 10000, stock: 30, sku: 'MNM-011', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=300&auto=format&fit=crop&q=80' },
+                    { id: 24, name: 'Air Mineral 600ml', category: 'minuman', price: 5000, costPrice: 2000, stock: 120, sku: 'MNM-012', image: 'https://images.unsplash.com/photo-1560023907-5f339617ea30?w=300&auto=format&fit=crop&q=80' },
+
+                    // --- SNACK / CAMILAN ---
+                    { id: 25, name: 'French Fries Crispy', category: 'snack', price: 18000, costPrice: 8000, stock: 40, sku: 'SNK-001', image: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=300&auto=format&fit=crop&q=80' },
+                    { id: 26, name: 'Cireng Bumbu Rujak', category: 'snack', price: 15000, costPrice: 6000, stock: 30, sku: 'SNK-002', image: 'https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=300&auto=format&fit=crop&q=80' },
+                    { id: 27, name: 'Pisang Goreng Keju Cokelat', category: 'snack', price: 20000, costPrice: 9000, stock: 25, sku: 'SNK-003', image: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=300&auto=format&fit=crop&q=80' },
+                    { id: 28, name: 'Dimsum Ayam (4 Pcs)', category: 'snack', price: 22000, costPrice: 11000, stock: 35, sku: 'SNK-004', image: 'https://images.unsplash.com/photo-1496116218417-1a781b1c416c?w=300&auto=format&fit=crop&q=80' },
+                    { id: 29, name: 'Roti Bakar Bandung', category: 'snack', price: 22000, costPrice: 10000, stock: 20, sku: 'SNK-005', image: 'https://images.unsplash.com/photo-1509722747041-616f39b57569?w=300&auto=format&fit=crop&q=80' },
+                    { id: 30, name: 'Chicken Nuggets & Fries', category: 'snack', price: 25000, costPrice: 12000, stock: 28, sku: 'SNK-006', image: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&auto=format&fit=crop&q=80' },
+                    { id: 31, name: 'Crispy Onion Rings', category: 'snack', price: 18000, costPrice: 7000, stock: 22, sku: 'SNK-007', image: 'https://images.unsplash.com/photo-1639024471283-03518883512d?w=300&auto=format&fit=crop&q=80' },
+                    { id: 32, name: 'Tahu Crispy Cabe Garam', category: 'snack', price: 16000, costPrice: 6000, stock: 30, sku: 'SNK-008', image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop&q=80' },
+
+                    // --- DESSERT ---
+                    { id: 33, name: 'Pancake Ice Cream', category: 'dessert', price: 28000, costPrice: 13000, stock: 18, sku: 'DSR-001', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=300&auto=format&fit=crop&q=80' },
+                    { id: 34, name: 'Waffle Cokelat Keju', category: 'dessert', price: 26000, costPrice: 12000, stock: 20, sku: 'DSR-002', image: 'https://images.unsplash.com/photo-1562376552-0d160a2f238d?w=300&auto=format&fit=crop&q=80' },
+                    { id: 35, name: 'Red Velvet Slice Cake', category: 'dessert', price: 30000, costPrice: 15000, stock: 12, sku: 'DSR-003', image: 'https://images.unsplash.com/photo-1586985289688-ca3cf47d3e6e?w=300&auto=format&fit=crop&q=80' },
+                    { id: 36, name: 'Brownies Fudgy Melt', category: 'dessert', price: 25000, costPrice: 11000, stock: 15, sku: 'DSR-004', image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=300&auto=format&fit=crop&q=80' },
+                    { id: 37, name: 'Es Teler Spesial', category: 'dessert', price: 22000, costPrice: 9000, stock: 25, sku: 'DSR-005', image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=300&auto=format&fit=crop&q=80' },
+                    { id: 38, name: 'Es Campur Segar', category: 'dessert', price: 20000, costPrice: 8000, stock: 30, sku: 'DSR-006', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=300&auto=format&fit=crop&q=80' }
+                ],
+
+                // Cart Array
+                cart: [],
+
+                // Product Form State
+                productForm: {
+                    id: null,
+                    name: '',
+                    category: 'makanan',
+                    price: 0,
+                    stock: 0,
+                    sku: '',
+                    image: ''
+                },
+
+                // Transactions History
+                transactions: [
+                    {
+                        id: 'TRX-10293',
+                        date: '29/10/2026, 14:20',
+                        items: [{ id: 1, name: 'Nasi Goreng Spesial', price: 25000, qty: 2 }],
+                        subtotal: 50000,
+                        discount: 0,
+                        tax: 5500,
+                        total: 55500,
+                        paymentMethod: 'cash',
+                        cashPaid: 60000,
+                        change: 4500
+                    }
+                ],
+
+                // Active receipt view
+                currentReceipt: {},
+
+                // Calculated Properties
+                get filteredProducts() {
+                    return this.products.filter(p => {
+                        const matchesCategory = this.selectedCategory === 'all' || p.category === this.selectedCategory;
+                        const matchesSearch = p.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || 
+                                              p.sku.toLowerCase().includes(this.searchQuery.toLowerCase());
+                        return matchesCategory && matchesSearch;
+                    });
+                },
+
+                get cartTotalQuantity() {
+                    return this.cart.reduce((sum, item) => sum + item.qty, 0);
+                },
+
+                get subtotal() {
+                    return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+                },
+
+                get discountAmount() {
+                    return (this.subtotal * (this.discountPercent || 0)) / 100;
+                },
+
+                get taxAmount() {
+                    return ((this.subtotal - this.discountAmount) * 0.11);
+                },
+
+                get grandTotal() {
+                    return (this.subtotal - this.discountAmount) + this.taxAmount;
+                },
+
+                get changeAmount() {
+                    return Math.max(0, this.cashPaid - this.grandTotal);
+                },
+
+                get totalRevenue() {
+                    return this.transactions.reduce((sum, trx) => sum + trx.total, 0);
+                },
+
+                get totalItemsSold() {
+                    return this.transactions.reduce((sum, trx) => {
+                        return sum + trx.items.reduce((iSum, item) => iSum + item.qty, 0);
+                    }, 0);
+                },
+
+                get topProducts() {
+                    // Aggregate sold items
+                    let counts = {};
+                    this.transactions.forEach(trx => {
+                        trx.items.forEach(item => {
+                            counts[item.name] = (counts[item.name] || 0) + item.qty;
+                        });
+                    });
+                    return Object.keys(counts).map(name => ({ name, sold: counts[name] })).sort((a,b) => b.sold - a.sold).slice(0, 5);
+                },
+
+                get formattedDate() {
+                    const now = new Date();
+                    return now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+                },
+
+                // Functions
+                getTabTitle() {
+                    switch(this.currentTab) {
+                        case 'pos': return 'Mesin Kasir / POS';
+                        case 'products': return 'Manajemen Produk';
+                        case 'history': return 'Riwayat Transaksi';
+                        case 'reports': return 'Laporan Penjualan';
+                        default: return 'Kasirku POS';
+                    }
+                },
+
+                formatRupiah(amount) {
+                    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount || 0);
+                },
+
+                addToCart(product) {
+                    if (product.stock <= 0) {
+                        this.addToast('Stok produk telah habis!', 'warning', 'fa-solid fa-triangle-exclamation');
+                        return;
+                    }
+
+                    const existing = this.cart.find(item => item.id === product.id);
+                    if (existing) {
+                        if (existing.qty + 1 > product.stock) {
+                            this.addToast('Kuantitas melebihi stok yang tersedia', 'warning', 'fa-solid fa-box');
+                            return;
+                        }
+                        existing.qty++;
+                    } else {
+                        this.cart.push({ ...product, qty: 1 });
+                    }
+                    this.addToast(`${product.name} ditambahkan`, 'info', 'fa-solid fa-cart-plus');
+                },
+
+                increaseQty(item) {
+                    const originalProduct = this.products.find(p => p.id === item.id);
+                    if (item.qty + 1 > originalProduct.stock) {
+                        this.addToast('Stok produk tidak mencukupi', 'warning', 'fa-solid fa-triangle-exclamation');
+                        return;
+                    }
+                    item.qty++;
+                },
+
+                decreaseQty(item) {
+                    if (item.qty > 1) {
+                        item.qty--;
+                    } else {
+                        this.removeFromCart(item);
+                    }
+                },
+
+                removeFromCart(item) {
+                    this.cart = this.cart.filter(i => i.id !== item.id);
+                },
+
+                clearCart() {
+                    this.cart = [];
+                    this.discountPercent = 0;
+                    this.addToast('Keranjang telah dikosongkan', 'info', 'fa-solid fa-trash-can');
+                },
+
+                searchByBarcode() {
+                    if (!this.barcodeQuery) return;
+                    const found = this.products.find(p => p.sku.toLowerCase() === this.barcodeQuery.toLowerCase());
+                    if (found) {
+                        this.addToCart(found);
+                        this.barcodeQuery = '';
+                    } else {
+                        this.addToast('Produk dengan SKU tersebut tidak ditemukan', 'danger', 'fa-solid fa-circle-xmark');
+                    }
+                },
+
+                openPaymentModal() {
+                    if (this.cart.length === 0) return;
+                    this.cashPaid = Math.ceil(this.grandTotal / 10000) * 10000; // Round to nearest 10k for convenience
+                    this.showPaymentModal = true;
+                },
+
+                processPayment() {
+                    // Reduce Stock
+                    this.cart.forEach(cartItem => {
+                        const product = this.products.find(p => p.id === cartItem.id);
+                        if (product) {
+                            product.stock -= cartItem.qty;
+                        }
+                    });
+
+                    // Create Transaction Record
+                    const trx = {
+                        id: 'TRX-' + Math.floor(10000 + Math.random() * 90000),
+                        date: new Date().toLocaleString('id-ID'),
+                        items: JSON.parse(JSON.stringify(this.cart)),
+                        subtotal: this.subtotal,
+                        discount: this.discountAmount,
+                        tax: this.taxAmount,
+                        total: this.grandTotal,
+                        paymentMethod: this.paymentMethod,
+                        cashPaid: this.paymentMethod === 'cash' ? this.cashPaid : this.grandTotal,
+                        change: this.paymentMethod === 'cash' ? this.changeAmount : 0
+                    };
+
+                    this.transactions.unshift(trx);
+                    this.currentReceipt = trx;
+
+                    // Reset POS
+                    this.cart = [];
+                    this.discountPercent = 0;
+                    this.showPaymentModal = false;
+                    this.showReceiptModal = true;
+
+                    this.addToast('Transaksi Berhasil Selesai!', 'success', 'fa-solid fa-circle-check');
+                },
+
+                viewReceipt(trx) {
+                    this.currentReceipt = trx;
+                    this.showReceiptModal = true;
+                },
+
+                printReceipt() {
+                    window.print();
+                },
+
+                // Product CRUD operations
+                openProductModal() {
+                    this.isEditingProduct = false;
+                    this.productForm = {
+                        id: Date.now(),
+                        name: '',
+                        category: 'makanan',
+                        price: 0,
+                        stock: 10,
+                        sku: 'SKU-' + Math.floor(100 + Math.random() * 900),
+                        image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop&q=80'
+                    };
+                    this.showProductModal = true;
+                },
+
+                editProduct(product) {
+                    this.isEditingProduct = true;
+                    this.productForm = JSON.parse(JSON.stringify(product));
+                    this.showProductModal = true;
+                },
+
+                saveProduct() {
+                    if (this.isEditingProduct) {
+                        const index = this.products.findIndex(p => p.id === this.productForm.id);
+                        if (index !== -1) {
+                            this.products[index] = { ...this.productForm };
+                            this.addToast('Produk berhasil diperbarui', 'success', 'fa-solid fa-pen-to-square');
+                        }
+                    } else {
+                        this.products.push({ ...this.productForm });
+                        this.addToast('Produk baru berhasil ditambahkan', 'success', 'fa-solid fa-plus');
+                    }
+                    this.showProductModal = false;
+                },
+
+                deleteProduct(id) {
+                    if (confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
+                        this.products = this.products.filter(p => p.id !== id);
+                        this.addToast('Produk telah dihapus', 'danger', 'fa-solid fa-trash');
+                    }
+                },
+
+                // Notification Toasts System
+                addToast(message, type = 'info', icon = 'fa-solid fa-info-circle') {
+                    const id = Date.now();
+                    this.toasts.push({ id, message, type, icon, show: true });
+                    setTimeout(() => {
+                        this.removeToast(id);
+                    }, 3000);
+                },
+
+                removeToast(id) {
+                    const toast = this.toasts.find(t => t.id === id);
+                    if (toast) {
+                        toast.show = false;
+                        setTimeout(() => {
+                            this.toasts = this.toasts.filter(t => t.id !== id);
+                        }, 300);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
